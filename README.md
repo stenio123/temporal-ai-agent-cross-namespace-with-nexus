@@ -49,17 +49,21 @@ uv run start_workflow.py
 └────────────┬────────────────────────────────┬───────────┘
              │                                │
              ▼                                ▼
-    ┌────────────────┐              ┌──────────────────┐
-    │ plan_next_action│              │  execute_tool   │
-    │   (Activity)    │              │   (Activity)    │
-    └────────┬────────┘              └────────┬─────────┘
-             │                                │
-             ▼                                ▼
+    ┌────────────────────┐             ┌──────────────────┐
+    │ plan_next_action   │             │  execute_tool    │
+    │   (Activity)       │             │   (Activity)     │
+    └────────┬───────────┘             └───────┬──────────┘
+             │                                 │
+             ▼                                 ▼
       ┌──────────┐                    ┌─────────────┐
       │   LLM    │                    │   Tools     │
       │  Client  │                    │ (calc, etc) │
       └──────────┘                    └─────────────┘
 ```
+
+Execution flow:
+
+![Alt Text](images/execution_flow.png)
 
 ## Files
 
