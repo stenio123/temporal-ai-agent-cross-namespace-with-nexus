@@ -1,12 +1,4 @@
-# Durable Agent Loop - Reference Implementation
-
-This is a minimal reference implementation of the **Durable Agent Loop Architecture** as described in the research paper. It demonstrates the three core primitives:
-
-1. **Deterministic Orchestrator Separation** (workflow.py)
-2. **Managed Side-Effect Abstraction** (activities.py)
-3. **Event-Sourced State Persistence** (via Temporal)
-
-This example runs all processes - Temporal server, worker and client - in a single machine, in separate terminals, however this is not a requirement. 
+# Cross Namespace AI Agent Orchestration with Temporal Nexus
 
 ## 🚀 Quick Start
 
@@ -34,6 +26,19 @@ uv run worker.py
 # 7. Run the agent (in third terminal)
 uv run start_workflow.py
 ```
+
+### Create Namespace in local dev
+```
+temporal operator namespace create it-namespace
+temporal operator namespace create finance-namespace
+```
+### Create Namespace in Temporal Cloud
+```
+cd infrastructure
+terraform apply
+# Make sure to update the namespace in the it_nexus_worker.py and the finance_nexus_worker.py file
+```
+
 
 ---
 
@@ -65,16 +70,6 @@ Execution flow:
 
 ![Alt Text](images/execution_flow.png)
 
-## Files
-
-- **`workflow.py`** - The deterministic orchestrator 
-- **`activities.py`** - Managed side-effects: LLM calls and tool execution 
-- **`llm_client.py`** - LiteLLM wrapper for model abstraction
-- **`worker.py`** - Temporal worker that executes workflows and activities
-- **`start_workflow.py`** - Interactive script to start and test the agent
-- **`MANUAL_TESTS.md`** - Fault injection tests validating the three scenarios
-- **`performance_benchmark.py`** - Benchmarks performance
-- **`.env.example`** - Environment variables for the agent
 
 ## Prerequisites
 
@@ -169,31 +164,6 @@ You can now chat with the agent. Try these examples:
 
 Type `quit`, `exit`, or `bye` to end the session.
 
-**Example interaction:**
-```
-Starting workflow: durable-agent-a1b2c3d4...
-You: What is 5 + 3?
-Agent: {"action": "use_tool", "tool": "calculator", "args": {"expression": "5 + 3"}}
-
-You: Thanks!
-Agent: You're welcome! Is there anything else I can help you with?
-
-You: quit
-```
-
-## Running Fault Injection Tests
-
-The failure scenarios are best executed manually. Follow the instructions on `MANUAL_TESTS.md`.
-
----
-
-## Running Performance Benchmarks
-
-To measure the quantitative metrics reported in Table 2 of the paper:
-
-```bash
-uv run performance_benchmark.py
-```
 
 ## Note
 This implementation is for educational purposes only and is not intended to be used in production. Current limitations include no context window management and no session management.

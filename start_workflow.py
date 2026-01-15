@@ -9,7 +9,7 @@ import uuid
 
 from temporalio.client import Client
 
-from workflow import AgentInput, DurableAgentWorkflow
+from app.workflow import AgentInput, DurableAgentWorkflow
 
 
 async def main():
@@ -26,7 +26,7 @@ async def main():
         DurableAgentWorkflow.run,
         AgentInput(),
         id=workflow_id,
-        task_queue="durable-agent-queue",
+        task_queue="orchestrator-queue",
     )
     print("✓ Workflow started\n")
     print("Type 'quit' to exit.\n")

@@ -1,11 +1,18 @@
 # Environment variables
-.env
+**/.env
 
 # uv lock file (commit this for reproducibility)
 # uv.lock
 
 # Virtual environment
 .venv/
+
+# Terraform
+**/*.tfvars
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/.terraform.lock.hcl
 
 # Python
 __pycache__/
