@@ -2,55 +2,94 @@
 
 ## 🚀 Quick Start
 
+### 1. Prerequisites
+*   **Temporal CLI**: `brew install temporal` (macOS)
+*   **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+*   **LLM API Key**: Copy `.env.example` to `.env` and add your `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
+
+### 2. Setup Environment
 ```bash
-# 1. Install Temporal CLI
-brew install temporal  # macOS
-# or: curl -sSf https://temporal.download/cli.sh | sh  # Linux
-
-# 2. Install uv (Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# 3. Set your LLM API key
-export OPENAI_API_KEY='sk-your-key-here'
-
-# 4. Install dependencies
-cd /path/to/researchPaper/code
+# Install dependencies
 uv sync
 
-# 5. Start Temporal (in separate terminal)
+# Start Temporal Server (in a separate terminal)
 temporal server start-dev
 
-# 6. Start worker (in another terminal)
-uv run worker.py
-
-# 7. Run the agent (in third terminal)
-uv run start_workflow.py
-```
-
-### Create Namespace in local dev
-```
+# Create Namespaces (local dev only)
 temporal operator namespace create it-namespace
 temporal operator namespace create finance-namespace
-```
 
-### Create Nexus Endpoints
-```
+# Create Nexus Endpoints (local dev only)
 temporal operator nexus endpoint create \
     --name it-nexus-endpoint \
     --target-namespace it-namespace \
     --target-task-queue it-task-queue
+
 temporal operator nexus endpoint create \
     --name finance-nexus-endpoint \
     --target-namespace finance-namespace \
     --target-task-queue finance-task-queue
+```
 
+### 3. Start Workers (Run each in a separate terminal)
+```bash
+# Start the Orchestrator (default namespace)
+uv run orchestrator_worker.py
+
+# Start the IT Worker (it-namespace)
+uv run it_nexus_worker.py
+
+# Start the Finance Worker (finance-namespace)
+uv run finance_nexus_worker.py
 ```
-### Create Namespace in Temporal Cloud
+
+### 4. Run the Agent
+```bash
+uv run start_workflow.py
 ```
+
+---
+
+## 💬 Sample Questions to Ask
+
+Try these examples to see the cross-namespace orchestration in action:
+
+1.  **Local Tool (Orchestrator)**:
+    *   "What is 125 * 8?"
+    *   "What's the weather like in New York?"
+2.  **Remote IT Tool**:
+    *   "What is the IP address of this computer?"
+    *   "Get JIRA metrics for project PROJ-123"
+3.  **Remote Finance Tool**:
+    *   "What is the stock price of AAPL?"
+    *   "Calculate ROI for $10,000 at 7% over 5 years"
+
+---
+
+## 🔍 Validation and Observability
+
+To confirm the cross-namespace communication is working as expected:
+
+1.  **Temporal Web UI**:
+    *   Open `http://localhost:8233`
+    *   Find your `OrchestratorWorkflow` execution.
+    *   In the **Nexus** tab, you can see the outgoing Nexus operations to `it-nexus-endpoint` and `finance-nexus-endpoint`.
+    *   Notice how the results are recorded in the workflow history.
+2.  **Worker Terminal Logs**:
+    *   Check the **IT Worker** terminal to see when `jira_metrics` or `get_ip` are triggered.
+    *   Check the **Finance Worker** terminal to see `stock_price` or `calculate_roi` executions.
+    *   Observe that the Orchestrator worker discovers tools from both namespaces on startup.
+
+---
+
+### Temporal Cloud (optional)
+If you want to use Temporal Cloud instead of a local environment, you can create the Namespaces and Nexus endpoints using Terraform:
+```bash
 cd infrastructure
 terraform apply
-# Make sure to update the namespace in the it_nexus_worker.py and the finance_nexus_worker.py file
+# Make sure to update app/shared.py with your Cloud Namespace IDs and Endpoint names
 ```
+
 
 
 ---
@@ -61,8 +100,8 @@ terraform apply
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                     Orchestrator Workflow                       │
-│                    (default namespace)                          │
+│                     Orchestrator Workflow                      │
+│                    (default namespace)                         │
 │  • Manages durable agent loop (while True)                     │
 │  • Calls Nexus operations for remote tools (deterministic!)    │
 │  • Calls activities for local tools & LLM                      │
@@ -78,11 +117,11 @@ terraform apply
 │  Endpoints      │              │  (LLM, calc, etc)│
 └───┬─────────┬───┘              └──────────────────┘
     │         │
-    │         │
-    ▼         ▼
-┌──────────────────┐    ┌──────────────────────┐
-│  IT Namespace    │    │  Finance Namespace   │
-│                  │    │                      │
+    │         │----------------------
+    ▼                               ▼
+┌──────────────────┐    ┌─────────────────────┐
+│  IT Namespace    │    │  Finance Namespace  │
+│                  │    │                     │
 │ ┌──────────────┐ │    │ ┌──────────────────┐│
 │ │ Nexus Handler│ │    │ │  Nexus Handler   ││
 │ │              │ │    │ │                  ││
@@ -97,24 +136,22 @@ terraform apply
 │ │• jira_metrics│ │    │ │• stock_price     ││
 │ │• get_ip      │ │    │ │• calculate_roi   ││
 │ └──────────────┘ │    │ └──────────────────┘│
-└──────────────────┘    └──────────────────────┘
+└──────────────────┘    └─────────────────────┘
 ```
 
 ### Key Architectural Decisions
 
 #### ✅ Nexus Calls from Workflow (Not Activities)
 
-**Why:** The Python SDK [explicitly states](https://github.com/temporalio/sdk-python):
-> "There is no support currently for calling a Nexus operation from non-workflow code."
-
-**Solution:** Nexus calls are made directly from the workflow:
+This demo has two Nexus calls available: 
 - `_discover_remote_tools()` - Calls Nexus to list available tools
 - `_execute_nexus_tool()` - Calls Nexus to execute remote tools
 
-**Determinism:** Nexus calls from workflows ARE deterministic:
-- Results are recorded in workflow history
-- On replay, Temporal uses recorded results (doesn't re-execute)
-- Same as how activities work
+`_discover_remote_tools` is called at the start of the main orchestrator worker, with the assumption that remote tools wont be added frequently, therefore this is a one time deterministic call made at the Temporal Workflow level. The Python SDK supports this.
+
+However, `_execute_nexus_tool()` is meant to be called inside the while loop of the Orchestrator, based on the LLM determining this is the next step to be taken. In theory, this should be an activity, since tool calls are non-deterministic. However this is actually a deterministic call to the Nexus endpoint. It is eventually picked up by the respective Nexus handler, that calls the tool and returns the result.
+
+The point to note is that in the current implementation, the Nexus handler is calling the tool as a regular function, so it wont have the Temporal retries and durability guarantees. For longer run or brittle functions, the Nexus handler should call a workflow in the remote location, which would then call the tool as an activity.
 
 #### ⚠️ Demo Trade-off: Synchronous Nexus Operations
 
@@ -175,101 +212,7 @@ This provides:
 
 Execution flow:
 
-![Alt Text](images/execution_flow.png)
-
-
-## Prerequisites
-
-1. **Temporal CLI**: Install the Temporal CLI for running the dev server
-   ```bash
-   # On macOS:
-   brew install temporal
-   
-   # On Linux:
-   curl -sSf https://temporal.download/cli.sh | sh
-   
-   # For other platforms, see: https://docs.temporal.io/cli
-   ```
-
-2. **uv**: Fast Python package installer and manager
-   ```bash
-   # On macOS/Linux:
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   
-   # Or via pip:
-   pip install uv
-   ```
-
-3. **Python 3.8+**: Managed automatically by `uv`
-
-4. **LLM API Key**: You'll need an API key for your LLM provider
-
-## Installation
-
-### 1. Set up your LLM API Key
-
-- Make a copy of .env.example and name it .env 
-- Choose your provider and set the appropriate environment variable
-
-### 2. Install Dependencies
-
-```bash
-# Create virtual environment and install dependencies
-uv sync
-
-# This will:
-# - Create a .venv directory with a virtual environment
-# - Install all dependencies from pyproject.toml
-# - Lock dependencies in uv.lock for reproducibility
-```
-
-### 3. Start Temporal Dev Server
-
-In a **separate terminal** (keep it running):
-
-```bash
-# Start Temporal development server
-temporal server start-dev
-
-# This will:
-# - Start Temporal server on localhost:7233
-# - Start Web UI on http://localhost:8233
-# - Use in-memory database
-```
-
-**Verify Temporal is running:**
-- Open http://localhost:8233 in your browser
-- You should see the Temporal Web UI
-
-## Running the Agent
-
-**Prerequisites:** Make sure you have:
-1. ✅ Set your LLM API key environment variable
-2. ✅ Temporal dev server running (`temporal server start-dev`)
-3. ✅ Installed dependencies (`uv sync`)
-
-### 1. Start the Worker
-
-In one terminal:
-```bash
-uv run worker.py
-```
-
-This starts the Temporal worker that executes workflows and activities.
-
-### 2. Start an Interactive Session
-
-In **another terminal** (keep the worker running):
-```bash
-uv run start_workflow.py
-```
-
-You can now chat with the agent. Try these examples:
-- "What is 25 + 17?"
-- "What's the weather in Seattle?"
-- "Calculate 100 / 5"
-
-Type `quit`, `exit`, or `bye` to end the session.
+![Alt Text](images/app_flow_with_nexus.png)
 
 
 ## Note

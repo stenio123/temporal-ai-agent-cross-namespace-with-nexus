@@ -1,0 +1,46 @@
+sequenceDiagram
+    participant U as User
+    participant C as Client
+    participant TS as Temporal Server
+    participant OW as Orchestrator Worker<br/>(default namespace)
+    participant LLM as LLM API
+    participant RW as Remote Worker<br/>(IT/Finance namespace)
+
+    U->>C: Enter message
+    C->>TS: send_message()
+    TS->>TS: Persist to Event Log
+    TS->>OW: Dispatch task
+
+    Note over OW,TS: Workflow startup:<br/>Discover remote tools via Nexus
+
+    OW->>TS: Nexus list_tools (sync)
+    TS->>RW: Route to remote namespace
+    RW-->>TS: Return tool definitions
+    TS-->>OW: Remote tools discovered
+    OW->>TS: Store in workflow state
+
+    loop Agent Loop
+        OW->>LLM: plan_next_action()
+        LLM-->>OW: PlanResult
+        OW->>TS: Store activity result
+
+        alt Local tool needed
+            OW->>OW: execute_tool()
+            OW->>TS: Store tool result
+        else Remote tool needed
+            OW->>TS: Nexus execute_tool (sync)
+            Note over TS: Nexus call is deterministic<br/>Result recorded in workflow history
+            TS->>RW: Route to remote namespace
+            RW->>RW: Execute tool (Python function)
+            Note over RW: NOT durable in demo<br/>(no workflow, no retries)
+            RW-->>TS: Return result
+            TS-->>OW: Tool result (deterministic)
+        else Ready to respond
+            OW-->>TS: pending_response
+        end
+    end
+
+    TS-->>C: Return response
+    C-->>U: Display response
+
+    Note over TS: On orchestrator failure:<br/>Replay from Event Log<br/>Nexus results retrieved from history
