@@ -1,48 +1,97 @@
-import uuid
-from dataclasses import dataclass
-from temporalio import nexus, workflow
+"""
+IT Nexus Handler
+Exposes IT tools to other namespaces via Nexus
+Based on: https://docs.temporal.io/develop/python/nexus
+"""
+from typing import Any, Dict, List
+
 import nexusrpc
 
-# We import these to use them in the handler
-with workflow.unsafe.imports_passed_through():
-    from workflow import DurableAgentWorkflow, AgentInput
+from app.it_service import ITService
 
-@dataclass
-class ToolOperationInput:
-    """The input sent from a remote namespace to this Nexus endpoint"""
-    prompt: str
 
-@dataclass
-class ToolOperationOutput:
-    """The final result returned across the Nexus bridge"""
-    result: str
-
-@nexusrpc.handler.service_handler(service="mcp-gateway")
-class AgentNexusHandler:
+@nexusrpc.handler.service_handler(service=ITService)
+class ITNexusHandler:
     """
-    This handler receives Nexus calls and 'bridges' them 
-    into a local DurableAgentWorkflow execution.
+    Nexus handler for IT namespace.
+    Exposes tools to orchestrator via Nexus operations.
+
+    Pattern: Synchronous operations for simple, fast tool execution.
+    Reference: nexusrpc.handler.sync_operation docs
     """
 
-    @nexus.workflow_run_operation
-    async def execute_agent_tool(
-        self, 
-        ctx: nexus.WorkflowRunOperationContext, 
-        input: ToolOperationInput
-    ) -> nexus.WorkflowHandle[ToolOperationOutput]:
+    @nexusrpc.handler.sync_operation
+    async def list_tools(
+        self,
+        ctx: nexusrpc.handler.StartOperationContext,
+        input: None
+    ) -> List[Dict[str, Any]]:
         """
-        Starts the DurableAgentWorkflow as an asynchronous Nexus operation.
-        Temporal handles the 'callback' to the caller once this workflow completes.
-        """
-        
-        # We wrap the Nexus input into the format our workflow expects
-        agent_input = AgentInput(initial_prompt=input.prompt)
+        Returns list of available IT tools.
+        Called once by orchestrator at workflow startup.
 
-        # Start the workflow. The Nexus Machinery will track this 
-        # and notify the caller when it finishes.
-        return await ctx.start_workflow(
-            DurableAgentWorkflow.run,
-            agent_input,
-            id=f"nexus-agent-{uuid.uuid4()}",
-            task_queue="it-task-queue" # Ensure this matches your worker's queue
-        )
+        Synchronous operation - must complete quickly (< 10s).
+        """
+        tools = [
+            {
+                "name": "jira_metrics",
+                "description": "Get JIRA project metrics and statistics",
+                "parameters": {"project": "string"},
+                "output": "string",
+                "namespace_id": "it"
+            },
+            {
+                "name": "get_ip",
+                "description": "Get current IP address",
+                "parameters": {},
+                "output": "string",
+                "namespace_id": "it"
+            },
+        ]
+
+        return tools
+
+    @nexusrpc.handler.sync_operation
+    async def execute_tool(
+        self,
+        ctx: nexusrpc.handler.StartOperationContext,
+        input: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute an IT tool synchronously.
+        Called by orchestrator when routing to IT namespace.
+
+        Pattern: Call activity directly from handler (simple demo).
+        Production: Start a workflow that executes the activity.
+        """
+        tool_name = input.get("tool_name")
+        args = input.get("args", {})
+
+        # For this demo, we call activities directly
+        # In production, you'd start a workflow
+        from app.it_activities import ITActivities
+
+        activities = ITActivities()
+
+        # Route to appropriate activity
+        try:
+            if tool_name == "jira_metrics":
+                result = await activities.jira_metrics(args.get("project", ""))
+            elif tool_name == "get_ip":
+                result = await activities.get_ip()
+            else:
+                raise ValueError(f"Unknown tool: {tool_name}")
+
+            return {
+                "tool_name": tool_name,
+                "result": result,
+                "success": True
+            }
+
+        except Exception as e:
+            # Return error in result format (don't raise exception)
+            return {
+                "tool_name": tool_name,
+                "result": f"Error: {str(e)}",
+                "success": False
+            }

@@ -32,6 +32,19 @@ uv run start_workflow.py
 temporal operator namespace create it-namespace
 temporal operator namespace create finance-namespace
 ```
+
+### Create Nexus Endpoints
+```
+temporal operator nexus endpoint create \
+    --name it-nexus-endpoint \
+    --target-namespace it-namespace \
+    --target-task-queue it-task-queue
+temporal operator nexus endpoint create \
+    --name finance-nexus-endpoint \
+    --target-namespace finance-namespace \
+    --target-task-queue finance-task-queue
+
+```
 ### Create Namespace in Temporal Cloud
 ```
 cd infrastructure
@@ -44,27 +57,121 @@ terraform apply
 
 ## Architecture Overview
 
+### Stage 2: Cross-Namespace Architecture with Temporal Nexus
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  DurableAgentWorkflow                   │
-│              (Deterministic Orchestrator)               │
-│  • Manages agent loop                                   │
-│  • Makes no I/O calls directly                          │
-│  • Delegates to activities                              │
-└────────────┬────────────────────────────────┬───────────┘
-             │                                │
-             ▼                                ▼
-    ┌────────────────────┐             ┌──────────────────┐
-    │ plan_next_action   │             │  execute_tool    │
-    │   (Activity)       │             │   (Activity)     │
-    └────────┬───────────┘             └───────┬──────────┘
-             │                                 │
-             ▼                                 ▼
-      ┌──────────┐                    ┌─────────────┐
-      │   LLM    │                    │   Tools     │
-      │  Client  │                    │ (calc, etc) │
-      └──────────┘                    └─────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                     Orchestrator Workflow                       │
+│                    (default namespace)                          │
+│  • Manages durable agent loop (while True)                     │
+│  • Calls Nexus operations for remote tools (deterministic!)    │
+│  • Calls activities for local tools & LLM                      │
+└──────┬──────────────────────────────────┬──────────────────────┘
+       │                                  │
+       │ Nexus Operations                 │ Activities
+       │ (Cross-namespace)                │ (Same namespace)
+       │                                  │
+       ▼                                  ▼
+┌─────────────────┐              ┌──────────────────┐
+│  Temporal       │              │ plan_next_action │
+│  Nexus          │              │  execute_tool    │
+│  Endpoints      │              │  (LLM, calc, etc)│
+└───┬─────────┬───┘              └──────────────────┘
+    │         │
+    │         │
+    ▼         ▼
+┌──────────────────┐    ┌──────────────────────┐
+│  IT Namespace    │    │  Finance Namespace   │
+│                  │    │                      │
+│ ┌──────────────┐ │    │ ┌──────────────────┐│
+│ │ Nexus Handler│ │    │ │  Nexus Handler   ││
+│ │              │ │    │ │                  ││
+│ │ • list_tools │ │    │ │  • list_tools    ││
+│ │ • execute_   │ │    │ │  • execute_tool  ││
+│ │   tool       │ │    │ │                  ││
+│ └──────┬───────┘ │    │ └────────┬─────────┘│
+│        │         │    │          │          │
+│        ▼         │    │          ▼          │
+│ ┌──────────────┐ │    │ ┌──────────────────┐│
+│ │IT Activities │ │    │ │Finance Activities││
+│ │• jira_metrics│ │    │ │• stock_price     ││
+│ │• get_ip      │ │    │ │• calculate_roi   ││
+│ └──────────────┘ │    │ └──────────────────┘│
+└──────────────────┘    └──────────────────────┘
 ```
+
+### Key Architectural Decisions
+
+#### ✅ Nexus Calls from Workflow (Not Activities)
+
+**Why:** The Python SDK [explicitly states](https://github.com/temporalio/sdk-python):
+> "There is no support currently for calling a Nexus operation from non-workflow code."
+
+**Solution:** Nexus calls are made directly from the workflow:
+- `_discover_remote_tools()` - Calls Nexus to list available tools
+- `_execute_nexus_tool()` - Calls Nexus to execute remote tools
+
+**Determinism:** Nexus calls from workflows ARE deterministic:
+- Results are recorded in workflow history
+- On replay, Temporal uses recorded results (doesn't re-execute)
+- Same as how activities work
+
+#### ⚠️ Demo Trade-off: Synchronous Nexus Operations
+
+**Current Implementation:**
+```python
+@nexusrpc.handler.sync_operation
+async def execute_tool(self, ctx, input):
+    # Calls activity methods as regular Python functions
+    activities = ITActivities()
+    result = await activities.jira_metrics(...)
+    return result
+```
+
+**Trade-offs:**
+- ✅ Simple and works for fast operations (< 10s)
+- ✅ Good for demo purposes
+- ❌ **No automatic retries** if function fails
+- ❌ **No Temporal activity features** (heartbeats, timeouts, etc.)
+- ❌ **Not durable** - if the Nexus handler crashes, work is lost
+
+**Production Recommendation:**
+
+For production use, Nexus handlers should start workflows instead:
+
+```python
+@nexus.workflow_run_operation
+async def execute_tool(
+    self,
+    ctx: nexus.WorkflowRunOperationContext,
+    input: Dict
+) -> nexus.WorkflowHandle[Dict]:
+    # Start a REAL workflow that properly calls activities
+    return await ctx.start_workflow(
+        ITToolWorkflow.run,
+        input,
+        id=f"it-tool-{uuid.uuid4()}",
+    )
+```
+
+This provides:
+- ✅ Full Temporal durability and retry logic
+- ✅ Proper activity execution with history
+- ✅ Better observability and debugging
+- ⚠️ More complex setup (need workflows in IT/Finance namespaces)
+
+### What's Durable vs Not Durable
+
+| Component | Durable? | Explanation |
+|-----------|----------|-------------|
+| Orchestrator workflow | ✅ Yes | Full Temporal workflow with history |
+| Orchestrator activities (LLM, local tools) | ✅ Yes | Proper activities with retries |
+| Nexus calls (to IT/Finance) | ✅ Yes | Results recorded in orchestrator history |
+| **IT/Finance tool execution** | ❌ **No** | Called as Python functions, not Temporal activities |
+
+**Impact:** If an IT/Finance tool fails during execution, there's no automatic retry. The orchestrator sees the failure and can retry the entire Nexus call, but the individual tool execution isn't durable.
+
+**For this demo:** This is acceptable - we're demonstrating cross-namespace communication, not production-grade durability.
 
 Execution flow:
 

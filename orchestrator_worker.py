@@ -20,8 +20,10 @@ async def main():
     
     # Create the activity implementation instances
     activities = AgentActivities()
-    
+
     # Register the Workflow class and Activity methods
+    # Note: list_remote_tools and execute_remote_tool are no longer activities
+    # They are now called directly from the workflow via Nexus SDK
     worker = Worker(
         client,
         task_queue="orchestrator-queue",
@@ -29,8 +31,6 @@ async def main():
         activities=[
             activities.plan_next_action,
             activities.execute_tool,
-            activities.list_remote_tools,
-            activities.execute_remote_tool,
         ],
     )
     

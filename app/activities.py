@@ -135,98 +135,17 @@ Respond with JSON:
     def _run_weather(self, args: Dict[str, Any]) -> ToolResult:
         city = args.get("city", "Unknown")
         return ToolResult("weather", f"Weather in {city}: Sunny, 72°F", True)
-    
-    @activity.defn(name="list_remote_tools")
-    async def list_remote_tools(self, namespace_id: str) -> List[Dict[str, Any]]:
-        """
-        Discover available tools from a remote namespace.
-        
-        STUB: Returns hardcoded list. In Stage 2, this will call Nexus.
-        """
-        activity.logger.info(f"[STUB] Listing tools for namespace: {namespace_id}")
-        
-        # STUB: Hardcoded tool lists matching expected MCP format
-        if namespace_id == "it":
-            tools = [
-                {
-                    "name": "jira_metrics",
-                    "description": "Get JIRA project metrics and statistics",
-                    "parameters": {"project": "string"},
-                    "output": "string",
-                    "namespace_id": "it"
-                },
-                {
-                    "name": "get_ip",
-                    "description": "Get current IP address",
-                    "parameters": {},
-                    "output": "string",
-                    "namespace_id": "it"
-                },
-            ]
-        elif namespace_id == "finance":
-            tools = [
-                {
-                    "name": "stock_price",
-                    "description": "Get stock price for a ticker symbol",
-                    "parameters": {"ticker": "string"},
-                    "output": "string",
-                    "namespace_id": "finance"
-                },
-                {
-                    "name": "calculate_roi",
-                    "description": "Calculate return on investment",
-                    "parameters": {"principal": "number", "rate": "number", "years": "number"},
-                    "output": "string",
-                    "namespace_id": "finance"
-                },
-            ]
-        else:
-            tools = []
-        
-        activity.logger.info(f"[STUB] Discovered {len(tools)} tools in {namespace_id} namespace")
-        for tool in tools:
-            activity.logger.info(f"  - {tool['name']}: {tool['description']}")
-        
-        return tools
-    
-    @activity.defn(name="execute_remote_tool")
-    async def execute_remote_tool(
-        self, 
-        namespace_id: str,
-        tool_name: str, 
-        args: Dict[str, Any]
-    ) -> ToolResult:
-        """
-        Execute a tool in a remote namespace.
-        
-        STUB: Returns realistic mock data to validate LLM routing. In Stage 2, this will call Nexus.
-        """
-        activity.logger.info(f"[STUB] ========== REMOTE TOOL EXECUTION ==========")
-        activity.logger.info(f"[STUB] Namespace: {namespace_id}")
-        activity.logger.info(f"[STUB] Tool: {tool_name}")
-        activity.logger.info(f"[STUB] Args: {args}")
-        activity.logger.info(f"[STUB] ===============================================")
-        
-        # STUB: Return realistic mock data based on tool
-        if tool_name == "stock_price":
-            ticker = args.get("ticker", "UNKNOWN")
-            mock_result = f"Stock price for {ticker}: $152.34 (as of market close)"
-        elif tool_name == "jira_metrics":
-            project = args.get("project", "UNKNOWN")
-            mock_result = f"JIRA metrics for {project}: 23 open issues, 45 closed, 68 total"
-        elif tool_name == "get_ip":
-            mock_result = "Current IP address: 192.168.1.100"
-        elif tool_name == "calculate_roi":
-            principal = args.get("principal", 0)
-            rate = args.get("rate", 0)
-            years = args.get("years", 0)
-            roi = principal * (1 + rate) ** years
-            mock_result = f"ROI calculation: ${roi:.2f} after {years} years"
-        else:
-            mock_result = f"Mock result from {namespace_id}.{tool_name}"
-        
-        return ToolResult(
-            tool_name=tool_name,
-            result=mock_result,
-            success=True
-        )
+
+    # Note: list_remote_tools and execute_remote_tool activities are NO LONGER NEEDED!
+    #
+    # Why? The Python SDK documentation explicitly states:
+    # "There is no support currently for calling a Nexus operation from non-workflow code."
+    #
+    # Solution: Nexus calls are now made directly from the workflow (see workflow.py):
+    # - _discover_remote_tools() calls Nexus to get tool lists
+    # - _execute_nexus_tool() calls Nexus to execute tools
+    #
+    # This is safe because:
+    # 1. Nexus calls from workflows ARE deterministic - they're recorded in workflow history
+    # 2. On replay, Temporal uses the recorded results instead of re-executing
+    # 3. This follows the SDK's documented best practices

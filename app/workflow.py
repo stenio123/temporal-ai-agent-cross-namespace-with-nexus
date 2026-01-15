@@ -11,6 +11,10 @@ from typing import Any, Dict, List, Optional
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from app.shared import ENDPOINT_IT, ENDPOINT_FINANCE
+from app.it_service import ITService
+from app.finance_service import FinanceService
+
 with workflow.unsafe.imports_passed_through():
     from app.activities import AgentActivities, PlanResult, ToolResult
 
@@ -69,28 +73,36 @@ class DurableAgentWorkflow:
     
     async def _discover_remote_tools(self) -> None:
         """
-        Discover available tools from remote namespaces.
-        Called once at workflow startup.
+        Discover available tools from remote namespaces via Nexus.
+        Called once at workflow startup - deterministic because Nexus calls from workflows are recorded in history.
         """
-        workflow.logger.info("Discovering remote tools...")
-        
-        # Call activity to list tools from IT namespace
-        it_tools = await workflow.execute_activity(
-            AgentActivities.list_remote_tools,
-            args=["it"],
-            start_to_close_timeout=timedelta(seconds=30),
+        workflow.logger.info("[Nexus] Discovering remote tools...")
+
+        # Create Nexus clients for IT and Finance
+        it_client = workflow.create_nexus_client(
+            service=ITService,
+            endpoint=ENDPOINT_IT,
+        )
+
+        finance_client = workflow.create_nexus_client(
+            service=FinanceService,
+            endpoint=ENDPOINT_FINANCE,
+        )
+
+        # Call list_tools operations via Nexus
+        it_tools = await it_client.execute_operation(
+            ITService.list_tools,
+            None,  # list_tools takes no input
         )
         self.remote_tools["it"] = it_tools
-        
-        # Call activity to list tools from Finance namespace
-        finance_tools = await workflow.execute_activity(
-            AgentActivities.list_remote_tools,
-            args=["finance"],
-            start_to_close_timeout=timedelta(seconds=30),
+
+        finance_tools = await finance_client.execute_operation(
+            FinanceService.list_tools,
+            None,
         )
         self.remote_tools["finance"] = finance_tools
-        
-        workflow.logger.info(f"Discovered {len(it_tools)} IT tools, {len(finance_tools)} Finance tools")
+
+        workflow.logger.info(f"[Nexus] ✓ Discovered {len(it_tools)} IT tools, {len(finance_tools)} Finance tools")
     
     async def _process_message(self) -> None:
         """Process user message through the agent loop"""
@@ -144,13 +156,14 @@ class DurableAgentWorkflow:
             
             elif plan.next_step == "execute_remote_tool":
                 workflow.logger.info(f"Executing remote tool: {plan.namespace_id}.{plan.tool_name}")
-                
-                tool_result: ToolResult = await workflow.execute_activity(
-                    AgentActivities.execute_remote_tool,
-                    args=[plan.namespace_id, plan.tool_name, plan.tool_args or {}],
-                    start_to_close_timeout=timedelta(seconds=30),
+
+                # Call Nexus directly from workflow (deterministic!)
+                tool_result = await self._execute_nexus_tool(
+                    plan.namespace_id,
+                    plan.tool_name,
+                    plan.tool_args or {}
                 )
-                
+
                 # Add to LLM context
                 self.conversation_history.append({
                     "role": "assistant",
@@ -160,7 +173,7 @@ class DurableAgentWorkflow:
                     "role": "user",
                     "content": f"Tool result: {tool_result.result}"
                 })
-                
+
                 context = f"Remote tool {plan.tool_name} returned: {tool_result.result}"
                 # Continue loop
             
@@ -180,7 +193,69 @@ class DurableAgentWorkflow:
                 
                 return
 
-    
+    async def _execute_nexus_tool(
+        self,
+        namespace_id: str,
+        tool_name: str,
+        args: Dict[str, Any]
+    ) -> ToolResult:
+        """
+        Execute a tool in a remote namespace via Nexus.
+        Called from workflow - deterministic because Nexus calls from workflows are recorded in history.
+        """
+        workflow.logger.info(f"[Nexus] Executing {namespace_id}.{tool_name} with args: {args}")
+
+        try:
+            # Determine endpoint and service
+            if namespace_id == "it":
+                client = workflow.create_nexus_client(
+                    service=ITService,
+                    endpoint=ENDPOINT_IT,
+                )
+                service_class = ITService
+            elif namespace_id == "finance":
+                client = workflow.create_nexus_client(
+                    service=FinanceService,
+                    endpoint=ENDPOINT_FINANCE,
+                )
+                service_class = FinanceService
+            else:
+                return ToolResult(
+                    tool_name=tool_name,
+                    result=f"Unknown namespace: {namespace_id}",
+                    success=False
+                )
+
+            # Prepare input for Nexus operation
+            nexus_input = {
+                "tool_name": tool_name,
+                "args": args
+            }
+
+            # Call execute_tool operation via Nexus
+            result_data = await client.execute_operation(
+                service_class.execute_tool,
+                nexus_input,
+            )
+
+            workflow.logger.info(f"[Nexus] ✓ Tool {tool_name} completed: {result_data}")
+
+            # Parse result
+            return ToolResult(
+                tool_name=result_data.get("tool_name", tool_name),
+                result=result_data.get("result", ""),
+                success=result_data.get("success", True)
+            )
+
+        except Exception as e:
+            workflow.logger.error(f"[Nexus] ✗ Exception executing {tool_name}: {e}")
+            return ToolResult(
+                tool_name=tool_name,
+                result=f"Nexus error: {str(e)}",
+                success=False
+            )
+
+
     # -------------------------------------------------------------------------
     # SIGNALS: How the client sends data to the workflow
     # -------------------------------------------------------------------------
