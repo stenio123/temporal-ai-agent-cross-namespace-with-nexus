@@ -11,6 +11,9 @@ from temporalio.worker import Worker
 from app.activities import AgentActivities
 from app.workflow import DurableAgentWorkflow
 
+# Current litellm version is issuing some pydantic warnings, not impactful to the demo
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 async def main():
     """Start the Temporal worker"""
