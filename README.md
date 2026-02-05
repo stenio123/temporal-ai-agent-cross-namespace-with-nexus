@@ -200,22 +200,25 @@ Try these examples to see cross-service orchestration in action:
 ┌────────────────────────────────────────────────────────┐
 │           Orchestrator Workflow (default namespace)    │
 │  • Durable agent loop                                  │
-│  • Nexus operations for remote tools (deterministic)   │
+│  • Individual Nexus operations per tool                │
 │  • Local activities for calculator, weather, LLM       │
 └──────┬──────────────────────────────┬──────────────────┘
        │                              │
-       │ Nexus Operations             │
-       │ (Cross-namespace)            │
+       │ Individual Nexus Operations  │
+       │ (Type-safe, cross-namespace) │
        ▼                              ▼
 ┌─────────────────┐          ┌──────────────────┐
 │  IT Namespace   │          │ Finance Namespace│
 │                 │          │                  │
 │ Nexus Handler   │          │ Nexus Handler    │
-│ • list_tools    │          │ • list_tools     │
-│ • execute_tool  │          │ • execute_tool   │
+│ • jira_metrics  │          │ • stock_price    │
+│ • get_ip        │          │ • calculate_roi  │
 │        │        │          │        │         │
 │        ▼        │          │        ▼         │
 │   Workflows     │          │   Workflows      │
+│   (Durable)     │          │   (Durable)      │
+│        │        │          │        │         │
+│        ▼        │          │        ▼         │
 │   Activities    │          │   Activities     │
 └─────────────────┘          └──────────────────┘
 ```
@@ -255,32 +258,65 @@ Try these examples to see cross-service orchestration in action:
 
 ### Nexus Pattern (litellm_temporal, openai_temporal)
 
-**Tool Discovery**: One-time deterministic Nexus call at workflow start
+Following **Temporal best practices**, all implementations use:
+
+**Individual Nexus Operations**: Each tool is its own typed operation
 ```python
-# Discover remote tools from Nexus endpoints
-tools = await workflow.execute_nexus_operation(
-    "it-nexus-endpoint",
-    "list_tools",
-)
+@nexusrpc.service
+class ITService:
+    jira_metrics: nexusrpc.Operation[JiraMetricsInput, str]
+    get_ip: nexusrpc.Operation[None, str]
 ```
 
-**Tool Execution**: Deterministic Nexus calls during agent loop
+**Workflow-Backed Operations**: Each operation starts a durable workflow
 ```python
-result = await workflow.execute_nexus_operation(
-    endpoint_name,
-    "execute_tool",
-    {"tool_name": "get_ip", "args": {}},
+@nexus.workflow_run_operation
+async def jira_metrics(
+    self,
+    ctx: nexus.WorkflowRunOperationContext,
+    input: JiraMetricsInput
+) -> nexus.WorkflowHandle[str]:
+    return await ctx.start_workflow(
+        GetJiraMetricsWorkflow.run,
+        input,
+        id=f"jira-metrics-{input.project}-{uuid.uuid4()}",
+    )
+```
+
+**Tool Execution**: Type-safe Nexus calls from orchestrator workflow
+```python
+# IT namespace
+client = workflow.create_nexus_client(
+    service=ITService,
+    endpoint="it-nexus-endpoint",
+)
+result = await client.execute_operation(
+    ITService.jira_metrics,
+    JiraMetricsInput(project="DEMO-123"),
+)
+
+# Finance namespace
+client = workflow.create_nexus_client(
+    service=FinanceService,
+    endpoint="finance-nexus-endpoint",
+)
+result = await client.execute_operation(
+    FinanceService.stock_price,
+    StockPriceInput(ticker="AAPL"),
 )
 ```
 
 **Benefits**:
 - ✅ Native Temporal cross-namespace communication
-- ✅ Full workflow history includes remote tool calls
+- ✅ Type-safe operations with Pydantic models
+- ✅ Full durability and retry logic (workflow-backed)
+- ✅ Excellent observability via workflow history
 - ✅ Team autonomy - each namespace independently deployable
+- ✅ Follows Temporal documentation best practices
 
 **Trade-offs**:
 - ⚠️ Requires Temporal infrastructure setup (namespaces, endpoints)
-- ⚠️ Current demo uses synchronous Nexus operations (see Production Recommendations below)
+- ⚠️ Tools must be known at development time (not dynamically discovered)
 
 ### MCP Pattern (openai_temporal_mcp)
 
@@ -317,41 +353,42 @@ result = await Runner.run(agent, input=user_message)
 
 ## ⚠️ Production Recommendations
 
-### Current Demo Trade-offs
+### Current Implementation Status
 
-All implementations prioritize **simplicity for demonstration**. For production use, consider these enhancements:
+✅ **Already Implemented - Production Patterns**:
 
-#### 1. Nexus Handler Implementation
+All implementations follow Temporal best practices:
 
-**Current (Demo)**:
+#### 1. Individual Nexus Operations (Not Generic Execute)
+
+**Current Implementation** (following Temporal docs):
 ```python
-@nexusrpc.handler.sync_operation
-async def execute_tool(self, ctx, input):
-    activities = ITActivities()
-    result = await activities.jira_metrics(...)  # Direct function call
-    return result
-```
+# Service definition with individual operations
+@nexusrpc.service
+class ITService:
+    jira_metrics: nexusrpc.Operation[JiraMetricsInput, str]
+    get_ip: nexusrpc.Operation[None, str]
 
-- ❌ No automatic retries if function fails
-- ❌ No Temporal durability features
-- ❌ Limited observability
-
-**Production Recommendation**:
-```python
+# Handler with workflow-backed operations
 @nexus.workflow_run_operation
-async def execute_tool(self, ctx, input) -> nexus.WorkflowHandle:
+async def jira_metrics(self, ctx, input: JiraMetricsInput) -> nexus.WorkflowHandle[str]:
     return await ctx.start_workflow(
-        ITToolWorkflow.run,
+        GetJiraMetricsWorkflow.run,
         input,
-        id=f"it-tool-{uuid.uuid4()}",
+        id=f"jira-metrics-{input.project}-{uuid.uuid4()}",
     )
 ```
 
+Benefits already in place:
 - ✅ Full Temporal durability and retry logic
 - ✅ Activity execution with proper timeouts/retries
-- ✅ Better observability via workflow history
+- ✅ Type safety with Pydantic models
+- ✅ Excellent observability via workflow history
+- ✅ Individual operations per tool (idiomatic pattern)
 
-#### 2. Authentication & Authorization
+### Additional Production Enhancements Needed
+
+#### 1. Authentication & Authorization
 
 **TODO**: Implement auth token passing using Temporal interceptors
 
@@ -378,14 +415,14 @@ class ValidateAuthInterceptor(Interceptor):
         return next.execute_activity(input)
 ```
 
-#### 3. Context Window Management
+#### 2. Context Window Management
 
 Current implementations do not manage LLM context windows. For production:
 - Implement conversation summarization
 - Sliding window for message history
 - Tool result truncation for large outputs
 
-#### 4. Error Handling
+#### 3. Error Handling
 
 Add production-grade error handling:
 - Graceful degradation when services unavailable
@@ -497,9 +534,11 @@ This is a reference implementation for educational purposes. Contributions welco
 
 ## 📝 TODOs
 
+- [x] **Production Nexus Handlers**: ✅ Already using workflow_run_operation pattern with individual operations
+- [x] **Type Safety**: ✅ Already using Pydantic models for all Nexus operation inputs
+- [x] **Durability**: ✅ Already backing all Nexus operations with durable workflows
 - [ ] **Auth Token Propagation**: Implement interceptor-based authentication from user → orchestrator → tool services
 - [ ] **Context Window Management**: Add conversation summarization and sliding window
-- [ ] **Production Nexus Handlers**: Convert sync operations to workflow_run_operation pattern
 - [ ] **Error Recovery**: Add circuit breakers and graceful degradation
 - [ ] **Observability**: Add structured logging, metrics, and tracing
 - [ ] **Testing**: Add integration tests for cross-namespace scenarios
