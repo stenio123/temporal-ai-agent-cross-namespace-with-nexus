@@ -1,0 +1,84 @@
+graph TB
+    subgraph "litellm_temporal: Manual Agent Loop + Nexus"
+        A1[User] --> A2[Client]
+        A2 --> A3[Temporal Server]
+        A3 --> A4[Orchestrator Workflow]
+        A4 --> A5{Agent Loop<br/>in Workflow}
+        A5 --> A6[plan_next_action<br/>Activity]
+        A6 --> A7[LLM API<br/>via LiteLLM]
+        A7 --> A6
+        A5 --> A8[execute_tool<br/>Activity]
+        A5 --> A9[Nexus Operations<br/>Individual per tool]
+        A9 --> A10[IT Worker<br/>it-namespace]
+        A9 --> A11[Finance Worker<br/>finance-namespace]
+        A10 --> A12[Durable Workflows]
+        A11 --> A13[Durable Workflows]
+
+        style A5 fill:#ffcccc
+        style A9 fill:#ccffcc
+        style A12 fill:#cce5ff
+        style A13 fill:#cce5ff
+    end
+
+    subgraph "openai_temporal: OpenAI SDK + Nexus"
+        B1[User] --> B2[Client]
+        B2 --> B3[Temporal Server]
+        B3 --> B4[Orchestrator Workflow]
+        B4 --> B5[OpenAI Agents SDK<br/>Runner.run]
+        B5 --> B6{Automatic<br/>Agent Loop}
+        B6 --> B7[LLM API<br/>via LiteLLM]
+        B7 --> B6
+        B6 --> B8[activity_as_tool<br/>wrapper]
+        B6 --> B9[nexus_operation_as_tool<br/>Individual operations]
+        B9 --> B10[IT Worker<br/>it-namespace]
+        B9 --> B11[Finance Worker<br/>finance-namespace]
+        B10 --> B12[Durable Workflows]
+        B11 --> B13[Durable Workflows]
+
+        style B6 fill:#d4edda
+        style B9 fill:#ccffcc
+        style B12 fill:#cce5ff
+        style B13 fill:#cce5ff
+    end
+
+    subgraph "openai_temporal_mcp: OpenAI SDK + MCP"
+        C1[User] --> C2[Client]
+        C2 --> C3[Temporal Server]
+        C3 --> C4[Orchestrator Workflow]
+        C4 --> C5[OpenAI Agents SDK<br/>Runner.run]
+        C5 --> C6{Automatic<br/>Agent Loop}
+        C6 --> C7[LLM API<br/>via LiteLLM]
+        C7 --> C6
+        C6 --> C8[activity_as_tool<br/>wrapper]
+        C6 --> C9[MCP Client Tools]
+        C9 --> C10[IT MCP Server<br/>HTTP subprocess]
+        C9 --> C11[Finance MCP Server<br/>HTTP subprocess]
+        C10 --> C12[IT Worker<br/>it-namespace]
+        C11 --> C13[Finance Worker<br/>finance-namespace]
+        C12 --> C14[Durable Workflows]
+        C13 --> C15[Durable Workflows]
+        C10 -.STDIO.-> C16[Claude Desktop]
+        C11 -.STDIO.-> C16
+
+        style C6 fill:#d4edda
+        style C10 fill:#fff3cd
+        style C11 fill:#fff3cd
+        style C14 fill:#cce5ff
+        style C15 fill:#cce5ff
+        style C16 fill:#e7d4f5
+    end
+
+    classDef manual fill:#ffcccc,stroke:#cc0000
+    classDef auto fill:#d4edda,stroke:#00cc00
+    classDef nexus fill:#ccffcc,stroke:#009900
+    classDef mcp fill:#fff3cd,stroke:#ffaa00
+    classDef workflow fill:#cce5ff,stroke:#0066cc
+    classDef external fill:#e7d4f5,stroke:#9900cc
+
+    %% Legend
+    L1[Manual Agent Loop]:::manual
+    L2[Automatic Agent Loop]:::auto
+    L3[Nexus Operations]:::nexus
+    L4[MCP Servers]:::mcp
+    L5[Durable Workflows]:::workflow
+    L6[External Clients]:::external

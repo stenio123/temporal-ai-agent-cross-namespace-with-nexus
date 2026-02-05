@@ -1,25 +1,91 @@
-# Cross Namespace AI Agent Orchestration with Temporal Nexus
+# Durable AI Agent Reference Implementations
+
+This repository demonstrates three patterns for building production-grade AI agents with Temporal, showcasing different approaches to tool orchestration and cross-team collaboration.
+
+## 🎯 Overview
+
+All three implementations share a common goal: **enabling AI agents to leverage external tools durably while allowing different teams to own and operate their services independently**.
+
+### Three Implementation Patterns
+
+| Project | Description | Tools Pattern | Best For |
+|---------|-------------|---------------|----------|
+| **litellm_temporal** | Pure Python with Temporal Nexus | Nexus endpoints across namespaces | Multi-team environments with service ownership |
+| **openai_temporal** | OpenAI Agents SDK + Temporal Nexus | Nexus endpoints with SDK integration | Teams wanting Agents SDK with cross-namespace tools |
+| **openai_temporal_mcp** | OpenAI Agents SDK + MCP | MCP servers (HTTP/STDIO) | Standard MCP protocol with durable workflows |
+
+![image](images/architecture_comparison.png)
+
+### Common Features
+
+- **LiteLLM Integration**: All implementations use [LiteLLM](https://github.com/BerriAI/litellm) for LLM abstraction, supporting OpenAI, Anthropic, Google, Azure, and 100+ providers
+- **Durable Execution**: Temporal workflows ensure agent loops survive failures and restarts
+- **Tool Durability**: External tool calls are tracked in workflow history
+- **Team Autonomy**: Each service (IT, Finance) operates in its own namespace/server with independent deployment
+- **Multi-turn Conversations**: Stateful agent interactions with conversation memory
+
+---
+
+## 📁 Project Structure
+
+```
+durable-agent-loop-reference-implementation/
+├── litellm_temporal/          # Pure Python + Temporal Nexus
+│   ├── orchestrator_worker.py
+│   ├── it_nexus_worker.py
+│   └── finance_nexus_worker.py
+├── openai_temporal/           # OpenAI Agents SDK + Nexus
+│   ├── orchestrator_worker.py
+│   ├── it_nexus_worker.py
+│   └── finance_nexus_worker.py
+├── openai_temporal_mcp/       # OpenAI Agents SDK + MCP
+│   ├── orchestrator_worker.py
+│   ├── it_worker.py
+│   ├── finance_worker.py
+│   └── mcp_servers/
+│       ├── it_mcp_server.py
+│       └── finance_mcp_server.py
+├── infrastructure/            # Terraform for Temporal Cloud
+│   └── (namespaces, nexus endpoints)
+└── README.md
+```
+
+---
 
 ## 🚀 Quick Start
 
-### 1. Prerequisites
-*   **Temporal CLI**: `brew install temporal` (macOS)
-*   **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-*   **LLM API Key**: Copy `.env.example` to `.env` and add your `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
+### Prerequisites
 
-### 2. Setup Environment
+- **Temporal CLI**: `brew install temporal` (macOS) or [download](https://docs.temporal.io/cli)
+- **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **LLM API Key**: Copy `.env.example` to `.env` and add your API key:
+  ```bash
+  # Choose one:
+  OPENAI_API_KEY=sk-...
+  ANTHROPIC_API_KEY=sk-ant-...
+  # Or any other LiteLLM-supported provider
+  ```
+
+### Choose Your Implementation
+
+<details>
+<summary><b>Option 1: litellm_temporal (Pure Python + Nexus)</b></summary>
+
+#### Setup
 ```bash
+cd litellm_temporal
+
 # Install dependencies
 uv sync
 
-# Start Temporal Server (in a separate terminal)
+# Start Temporal Server (separate terminal)
 temporal server start-dev
 
-# Create Namespaces (local dev only)
+# Create namespaces (local dev only)
 temporal operator namespace create it-namespace
 temporal operator namespace create finance-namespace
 
-# Create Nexus Endpoints (local dev only)
+# Create Nexus endpoints
 temporal operator nexus endpoint create \
     --name it-nexus-endpoint \
     --target-namespace it-namespace \
@@ -31,159 +97,249 @@ temporal operator nexus endpoint create \
     --target-task-queue finance-task-queue
 ```
 
-### 3. Start Workers (Run each in a separate terminal)
+#### Start Workers (each in separate terminal)
 ```bash
-# Start the Orchestrator (default namespace)
 uv run orchestrator_worker.py
-
-# Start the IT Worker (it-namespace)
 uv run it_nexus_worker.py
-
-# Start the Finance Worker (finance-namespace)
 uv run finance_nexus_worker.py
 ```
 
-### 4. Run the Agent
+#### Run Agent
 ```bash
 uv run start_workflow.py
 ```
 
----
+</details>
 
-## 💬 Sample Questions to Ask
+<details>
+<summary><b>Option 2: openai_temporal (Agents SDK + Nexus)</b></summary>
 
-Try these examples to see the cross-namespace orchestration in action:
-
-1.  **Local Tool (Orchestrator)**:
-    *   "What is 125 * 8?"
-    *   "What's the weather like in New York?"
-2.  **Remote IT Tool**:
-    *   "What is the IP address of this computer?"
-    *   "Get JIRA metrics for project PROJ-123"
-3.  **Remote Finance Tool**:
-    *   "What is the stock price of AAPL?"
-    *   "Calculate ROI for $10,000 at 7% over 5 years"
-
----
-
-## 🔍 Validation and Observability
-
-To confirm the cross-namespace communication is working as expected:
-
-1.  **Temporal Web UI**:
-    *   Open `http://localhost:8233`
-    *   Find your `OrchestratorWorkflow` execution.
-    *   In the **Nexus** tab, you can see the outgoing Nexus operations to `it-nexus-endpoint` and `finance-nexus-endpoint`.
-    *   Notice how the results are recorded in the workflow history.
-2.  **Worker Terminal Logs**:
-    *   Check the **IT Worker** terminal to see when `jira_metrics` or `get_ip` are triggered.
-    *   Check the **Finance Worker** terminal to see `stock_price` or `calculate_roi` executions.
-    *   Observe that the Orchestrator worker discovers tools from both namespaces on startup.
-
----
-
-### Temporal Cloud (optional)
-If you want to use Temporal Cloud instead of a local environment, you can create the Namespaces and Nexus endpoints using Terraform:
+#### Setup
 ```bash
-cd infrastructure
-terraform apply
-# Make sure to update app/shared.py with your Cloud Namespace IDs and Endpoint names
+cd openai_temporal
+
+# Follow same setup as litellm_temporal above
 ```
 
+#### Start Workers
+```bash
+uv run orchestrator_worker.py
+uv run it_nexus_worker.py
+uv run finance_nexus_worker.py
+```
 
+#### Run Agent
+```bash
+uv run start_workflow.py
+```
+
+</details>
+
+<details>
+<summary><b>Option 3: openai_temporal_mcp (Agents SDK + MCP)</b></summary>
+
+#### Setup
+```bash
+cd openai_temporal_mcp
+
+# Install dependencies
+uv sync
+
+# Start Temporal Server (separate terminal)
+temporal server start-dev
+
+# Create namespaces (local dev only)
+temporal operator namespace create it-namespace
+temporal operator namespace create finance-namespace
+```
+
+#### Start All Services (each in separate terminal)
+```bash
+# MCP Servers
+uv run mcp_servers/finance_mcp_server.py
+uv run mcp_servers/it_mcp_server.py
+
+# Workers
+uv run orchestrator_worker.py
+uv run finance_worker.py
+uv run it_worker.py
+```
+
+#### Run Agent
+```bash
+uv run start_workflow.py
+```
+
+</details>
 
 ---
 
-## Architecture Overview
+## 💬 Sample Questions
 
-### Stage 2: Cross-Namespace Architecture with Temporal Nexus
+Try these examples to see cross-service orchestration in action:
+
+**Local Tools (Orchestrator)**
+- "What is 125 * 8?"
+- "What's the weather like in San Francisco?"
+
+**IT Service**
+- "What is my IP address?"
+- "Get JIRA metrics for project DEMO-456"
+
+**Finance Service**
+- "What's the stock price of TSLA?"
+- "Calculate ROI for $10,000 at 5% over 10 years"
+
+---
+
+## 🏗️ Architecture Comparison
+
+### litellm_temporal + openai_temporal (Nexus Pattern)
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                     Orchestrator Workflow                      │
-│                    (default namespace)                         │
-│  • Manages durable agent loop (while True)                     │
-│  • Calls Nexus operations for remote tools (deterministic!)    │
-│  • Calls activities for local tools & LLM                      │
-└──────┬──────────────────────────────────┬──────────────────────┘
-       │                                  │
-       │ Nexus Operations                 │ Activities
-       │ (Cross-namespace)                │ (Same namespace)
-       │                                  │
-       ▼                                  ▼
-┌─────────────────┐              ┌──────────────────┐
-│  Temporal       │              │ plan_next_action │
-│  Nexus          │              │  execute_tool    │
-│  Endpoints      │              │  (LLM, calc, etc)│
-└───┬─────────┬───┘              └──────────────────┘
-    │         │
-    │         │----------------------
-    ▼                               ▼
-┌──────────────────┐    ┌─────────────────────┐
-│  IT Namespace    │    │  Finance Namespace  │
-│                  │    │                     │
-│ ┌──────────────┐ │    │ ┌──────────────────┐│
-│ │ Nexus Handler│ │    │ │  Nexus Handler   ││
-│ │              │ │    │ │                  ││
-│ │ • list_tools │ │    │ │  • list_tools    ││
-│ │ • execute_   │ │    │ │  • execute_tool  ││
-│ │   tool       │ │    │ │                  ││
-│ └──────┬───────┘ │    │ └────────┬─────────┘│
-│        │         │    │          │          │
-│        ▼         │    │          ▼          │
-│ ┌──────────────┐ │    │ ┌──────────────────┐│
-│ │IT Activities │ │    │ │Finance Activities││
-│ │• jira_metrics│ │    │ │• stock_price     ││
-│ │• get_ip      │ │    │ │• calculate_roi   ││
-│ └──────────────┘ │    │ └──────────────────┘│
-└──────────────────┘    └─────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│           Orchestrator Workflow (default namespace)    │
+│  • Durable agent loop                                  │
+│  • Nexus operations for remote tools (deterministic)   │
+│  • Local activities for calculator, weather, LLM       │
+└──────┬──────────────────────────────┬──────────────────┘
+       │                              │
+       │ Nexus Operations             │
+       │ (Cross-namespace)            │
+       ▼                              ▼
+┌─────────────────┐          ┌──────────────────┐
+│  IT Namespace   │          │ Finance Namespace│
+│                 │          │                  │
+│ Nexus Handler   │          │ Nexus Handler    │
+│ • list_tools    │          │ • list_tools     │
+│ • execute_tool  │          │ • execute_tool   │
+│        │        │          │        │         │
+│        ▼        │          │        ▼         │
+│   Workflows     │          │   Workflows      │
+│   Activities    │          │   Activities     │
+└─────────────────┘          └──────────────────┘
 ```
 
-### Key Architectural Decisions
+### openai_temporal_mcp (MCP Pattern)
 
-#### ✅ Nexus Calls from Workflow (Not Activities)
+```
+┌────────────────────────────────────────────────────────┐
+│         Orchestrator Workflow (default namespace)      │
+│  • OpenAI Agents SDK with Runner.run()                 │
+│  • MCP tools accessed via native SDK protocol          │
+│  • Local activities for calculator, weather            │
+└──────┬──────────────────────────────┬──────────────────┘
+       │                              │
+       │ MCP HTTP Protocol            │
+       │ (Streamable-HTTP transport)  │
+       ▼                              ▼
+┌─────────────────┐          ┌──────────────────┐
+│  IT MCP Server  │          │Finance MCP Server│
+│  (port 8002)    │          │  (port 8001)     │
+│                 │          │                  │
+│  FastMCP        │          │  FastMCP         │
+│  • get_ip       │          │  • stock_price   │
+│  • get_jira_    │          │  • calculate_roi │
+│    metrics      │          │                  │
+│        │        │          │        │         │
+│        ▼        │          │        ▼         │
+│ IT Namespace    │          │ Finance Namespace│
+│   Workflows     │          │   Workflows      │
+│   Activities    │          │   Activities     │
+└─────────────────┘          └──────────────────┘
+```
 
-This demo has two Nexus calls available: 
-- `_discover_remote_tools()` - Calls Nexus to list available tools
-- `_execute_nexus_tool()` - Calls Nexus to execute remote tools
+---
 
-`_discover_remote_tools` is called at the start of the main orchestrator worker, with the assumption that remote tools wont be added frequently, therefore this is a one time deterministic call made at the Temporal Workflow level. The Python SDK supports this.
+## 🔍 Key Architectural Decisions
 
-However, `_execute_nexus_tool()` is meant to be called inside the while loop of the Orchestrator, based on the LLM determining this is the next step to be taken. In theory, this should be an activity, since tool calls are non-deterministic. However this is actually a deterministic call to the Nexus endpoint. It is eventually picked up by the respective Nexus handler, that calls the tool and returns the result.
+### Nexus Pattern (litellm_temporal, openai_temporal)
 
-The point to note is that in the current implementation, the Nexus handler is calling the tool as a regular function, so it wont have the Temporal retries and durability guarantees. For longer run or brittle functions, the Nexus handler should call a workflow in the remote location, which would then call the tool as an activity.
+**Tool Discovery**: One-time deterministic Nexus call at workflow start
+```python
+# Discover remote tools from Nexus endpoints
+tools = await workflow.execute_nexus_operation(
+    "it-nexus-endpoint",
+    "list_tools",
+)
+```
 
-#### ⚠️ Demo Trade-off: Synchronous Nexus Operations
+**Tool Execution**: Deterministic Nexus calls during agent loop
+```python
+result = await workflow.execute_nexus_operation(
+    endpoint_name,
+    "execute_tool",
+    {"tool_name": "get_ip", "args": {}},
+)
+```
 
-**Current Implementation:**
+**Benefits**:
+- ✅ Native Temporal cross-namespace communication
+- ✅ Full workflow history includes remote tool calls
+- ✅ Team autonomy - each namespace independently deployable
+
+**Trade-offs**:
+- ⚠️ Requires Temporal infrastructure setup (namespaces, endpoints)
+- ⚠️ Current demo uses synchronous Nexus operations (see Production Recommendations below)
+
+### MCP Pattern (openai_temporal_mcp)
+
+**Tool Discovery**: Automatic via OpenAI Agents SDK plugin
+```python
+client = await Client.connect(
+    plugins=[OpenAIAgentsPlugin(
+        mcp_server_providers=[
+            StatelessMCPServerProvider(
+                name="finance",
+                server_factory=create_finance_server
+            )
+        ]
+    )]
+)
+```
+
+**Tool Execution**: SDK handles MCP protocol transparently
+```python
+# SDK automatically calls MCP tools based on agent decisions
+result = await Runner.run(agent, input=user_message)
+```
+
+**Benefits**:
+- ✅ Standard MCP protocol (works with Claude Desktop, Goose, etc.)
+- ✅ Simpler setup - no Nexus endpoint configuration
+- ✅ Both HTTP and STDIO transports supported
+
+**Trade-offs**:
+- ⚠️ MCP servers must be reachable via HTTP (in this implementation)
+- ⚠️ Separate processes for MCP servers
+
+---
+
+## ⚠️ Production Recommendations
+
+### Current Demo Trade-offs
+
+All implementations prioritize **simplicity for demonstration**. For production use, consider these enhancements:
+
+#### 1. Nexus Handler Implementation
+
+**Current (Demo)**:
 ```python
 @nexusrpc.handler.sync_operation
 async def execute_tool(self, ctx, input):
-    # Calls activity methods as regular Python functions
     activities = ITActivities()
-    result = await activities.jira_metrics(...)
+    result = await activities.jira_metrics(...)  # Direct function call
     return result
 ```
 
-**Trade-offs:**
-- ✅ Simple and works for fast operations (< 10s)
-- ✅ Good for demo purposes
-- ❌ **No automatic retries** if function fails
-- ❌ **No Temporal activity features** (heartbeats, timeouts, etc.)
-- ❌ **Not durable** - if the Nexus handler crashes, work is lost
+- ❌ No automatic retries if function fails
+- ❌ No Temporal durability features
+- ❌ Limited observability
 
-**Production Recommendation:**
-
-For production use, Nexus handlers should start workflows instead:
-
+**Production Recommendation**:
 ```python
 @nexus.workflow_run_operation
-async def execute_tool(
-    self,
-    ctx: nexus.WorkflowRunOperationContext,
-    input: Dict
-) -> nexus.WorkflowHandle[Dict]:
-    # Start a REAL workflow that properly calls activities
+async def execute_tool(self, ctx, input) -> nexus.WorkflowHandle:
     return await ctx.start_workflow(
         ITToolWorkflow.run,
         input,
@@ -191,29 +347,174 @@ async def execute_tool(
     )
 ```
 
-This provides:
 - ✅ Full Temporal durability and retry logic
-- ✅ Proper activity execution with history
-- ✅ Better observability and debugging
-- ⚠️ More complex setup (need workflows in IT/Finance namespaces)
+- ✅ Activity execution with proper timeouts/retries
+- ✅ Better observability via workflow history
 
-### What's Durable vs Not Durable
+#### 2. Authentication & Authorization
 
-| Component | Durable? | Explanation |
-|-----------|----------|-------------|
-| Orchestrator workflow | ✅ Yes | Full Temporal workflow with history |
-| Orchestrator activities (LLM, local tools) | ✅ Yes | Proper activities with retries |
-| Nexus calls (to IT/Finance) | ✅ Yes | Results recorded in orchestrator history |
-| **IT/Finance tool execution** | ❌ **No** | Called as Python functions, not Temporal activities |
+**TODO**: Implement auth token passing using Temporal interceptors
 
-**Impact:** If an IT/Finance tool fails during execution, there's no automatic retry. The orchestrator sees the failure and can retry the entire Nexus call, but the individual tool execution isn't durable.
+The pattern should:
+1. User authenticates with orchestrator agent
+2. Auth token passed via workflow headers (interceptor)
+3. Token propagated through Nexus calls / MCP requests
+4. Tool services validate token before execution
 
-**For this demo:** This is acceptable - we're demonstrating cross-namespace communication, not production-grade durability.
+Example implementation:
+```python
+# Orchestrator - add token to headers
+class AuthInterceptor(Interceptor):
+    def intercept_workflow(self, input):
+        input.headers["auth_token"] = get_user_token()
+        return next.start_workflow(input)
 
-Execution flow:
+# Tool service - validate token
+class ValidateAuthInterceptor(Interceptor):
+    def intercept_activity(self, input):
+        token = input.headers.get("auth_token")
+        if not validate_token(token):
+            raise Unauthorized()
+        return next.execute_activity(input)
+```
 
-![Alt Text](images/app_flow_with_nexus.png)
+#### 3. Context Window Management
 
+Current implementations do not manage LLM context windows. For production:
+- Implement conversation summarization
+- Sliding window for message history
+- Tool result truncation for large outputs
 
-## Note
-This implementation is for educational purposes only and is not intended to be used in production. Current limitations include no context window management and no session management.
+#### 4. Error Handling
+
+Add production-grade error handling:
+- Graceful degradation when services unavailable
+- Circuit breakers for failing services
+- User-friendly error messages
+
+---
+
+## ☁️ Temporal Cloud Deployment
+
+### Using Terraform (infrastructure/)
+
+The `infrastructure/` directory contains Terraform code for provisioning Temporal Cloud resources:
+
+```bash
+cd infrastructure
+
+# Configure Temporal Cloud credentials
+export TEMPORAL_CLOUD_API_KEY=your-key
+
+# Review planned changes
+terraform plan
+
+# Create namespaces and Nexus endpoints
+terraform apply
+```
+
+**Resources Created**:
+- Temporal Cloud namespaces (`default`, `it-namespace`, `finance-namespace`)
+- Nexus endpoints for cross-namespace communication
+- Required RBAC permissions
+
+After deployment, update `app/shared.py` in each project with your Cloud namespace IDs and endpoint names.
+
+---
+
+## 🔧 Development
+
+### Project Dependencies
+
+All projects use:
+- **temporalio**: Temporal Python SDK
+- **litellm**: LLM provider abstraction
+- **pydantic**: Data validation
+- **fastmcp** (MCP project only): FastMCP framework
+
+### Environment Variables
+
+```bash
+# LLM Provider (choose one)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Temporal (optional, defaults to localhost)
+TEMPORAL_ADDRESS=localhost:7233
+
+# MCP Servers (optional, defaults shown)
+FINANCE_MCP_PORT=8001
+IT_MCP_PORT=8002
+```
+
+### Running Tests
+
+```bash
+# In each project directory
+uv run pytest
+```
+
+### Troubleshooting
+
+**Non-OpenAI Model Warnings**: When using non-OpenAI models (e.g., Anthropic Claude, Gemini), you may see harmless tracing warnings in the OpenAI Agents SDK projects:
+```
+Current span is not a FunctionSpanData, skipping tool output
+OPENAI_API_KEY is not set, skipping trace export
+```
+These warnings are expected and do not affect functionality. The OpenAI Agents SDK includes optional tracing features that attempt to export traces to OpenAI when available.
+
+---
+
+## 📊 Observability
+
+### Temporal Web UI
+
+1. Open `http://localhost:8233` (local) or your Temporal Cloud URL
+2. Find your workflow execution
+3. Observe:
+   - **Nexus operations** (litellm_temporal, openai_temporal): See calls to IT/Finance endpoints in Nexus tab
+   - **Activity executions**: Local tool calls (calculator, weather, LLM)
+   - **Workflow history**: Complete audit trail of agent decisions
+
+### Worker Logs
+
+Each worker outputs structured logs showing:
+- Tool discovery at startup
+- Tool execution with parameters
+- Results returned to orchestrator
+
+---
+
+## 🤝 Contributing
+
+This is a reference implementation for educational purposes. Contributions welcome:
+- Bug fixes
+- Documentation improvements
+- Additional tool examples
+- Production hardening patterns
+
+---
+
+## 📝 TODOs
+
+- [ ] **Auth Token Propagation**: Implement interceptor-based authentication from user → orchestrator → tool services
+- [ ] **Context Window Management**: Add conversation summarization and sliding window
+- [ ] **Production Nexus Handlers**: Convert sync operations to workflow_run_operation pattern
+- [ ] **Error Recovery**: Add circuit breakers and graceful degradation
+- [ ] **Observability**: Add structured logging, metrics, and tracing
+- [ ] **Testing**: Add integration tests for cross-namespace scenarios
+
+---
+
+## ⚖️ License
+
+MIT
+
+---
+
+## 🙏 Acknowledgments
+
+- [Temporal](https://temporal.io) - Durable execution platform
+- [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) - Agent framework
+- [LiteLLM](https://github.com/BerriAI/litellm) - LLM provider abstraction
+- [FastMCP](https://github.com/jlowin/fastmcp) - MCP server framework
