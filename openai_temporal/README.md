@@ -1,9 +1,9 @@
 # Durable Agent Loop - OpenAI Agents SDK Implementation
 
-**Approach:** OpenAI Agents SDK with automatic agent loop management
+**Approach:** OpenAI Agents SDK with AI agent loop management
 
 This implementation demonstrates a complete durable agent loop built with:
-- **OpenAI Agents SDK** - Automatic agent orchestration via Runner.run()
+- **OpenAI Agents SDK** - AI agent orchestration via Runner.run()
 - **LiteLLM integration** - Support for any LLM provider (OpenAI, Anthropic Claude, Google Gemini, etc.)
 - **Temporal activities** - Local tools wrapped as activities
 - **Nexus operations** - Cross-namespace tool execution (IT and Finance services)
@@ -11,6 +11,8 @@ This implementation demonstrates a complete durable agent loop built with:
 - **Multi-turn conversations** - Interactive chat via Temporal Updates
 
 ## Architecture
+
+![Architecture](../images/openai_temporal.png)
 
 ### Components
 
@@ -169,102 +171,6 @@ This implementation uses LiteLLM, so you can easily switch providers by:
 
 3. **Restart workers** for changes to take effect
 
-## Code Structure
-
-```
-openai_temporal/
-├── app/
-│   ├── activities.py              # Local tools (calculator, weather)
-│   ├── workflow.py                # OpenAI Agent SDK integration
-│   ├── llm_client.py              # LLM configuration and Agent creation
-│   ├── it_activities.py           # IT tool implementations
-│   ├── finance_activities.py      # Finance tool implementations
-│   ├── it_models.py               # IT operation input models (Pydantic)
-│   ├── finance_models.py          # Finance operation input models (Pydantic)
-│   ├── it_service.py              # IT Nexus service definition
-│   ├── finance_service.py         # Finance Nexus service definition
-│   ├── it_nexus_handler.py        # IT Nexus handlers
-│   ├── finance_nexus_handler.py   # Finance Nexus handlers
-│   └── shared.py                  # Shared constants
-├── orchestrator_worker.py         # Main workflow worker
-├── client.py                      # Interactive CLI client
-├── it_nexus_worker.py             # IT namespace worker
-├── finance_nexus_worker.py        # Finance namespace worker
-└── pyproject.toml                 # Dependencies
-```
-
-## Key Patterns
-
-### OpenAI Agent SDK Setup
-```python
-# Build tools list
-tools = [
-    # Local tools
-    activity_as_tool(AgentActivities.calculator, ...),
-    activity_as_tool(AgentActivities.weather, ...),
-    # Remote Nexus operations (individual operations)
-    nexus_operation_as_tool(ITService.jira_metrics, service=ITService, endpoint="it-nexus-endpoint"),
-    nexus_operation_as_tool(FinanceService.stock_price, service=FinanceService, endpoint="finance-nexus-endpoint"),
-]
-
-# Create agent using llm_client (centralizes LLM configuration)
-agent = create_agent(
-    instructions="...",
-    tools=tools,
-)
-
-# SDK handles agent loop automatically
-async with Runner(workflow_info=workflow.info(), agent=agent) as runner:
-    await runner.run(message=self.current_message)
-```
-
-### Individual Nexus Operations with Pydantic Models
-```python
-# Service definition
-@nexusrpc.service
-class ITService:
-    jira_metrics: nexusrpc.Operation[JiraMetricsInput, str]
-    get_ip: nexusrpc.Operation[None, str]
-
-# Input model (Temporal best practice)
-class JiraMetricsInput(BaseModel):
-    project: str = Field(description="JIRA project identifier")
-
-# Handler
-@nexusrpc.handler.sync_operation
-async def jira_metrics(self, ctx, input: JiraMetricsInput) -> str:
-    return await self.activities.jira_metrics(input.project)
-```
-
-### Multi-Turn with Updates
-```python
-@workflow.update
-async def send_message(self, message: str) -> str:
-    """Send message and wait for response"""
-    self.current_message = message
-    await workflow.wait_condition(lambda: self.pending_response is not None)
-    response = self.pending_response
-    self.pending_response = None
-    return response
-```
-
-## Troubleshooting
-
-**Workers not connecting:**
-- Ensure Temporal server is running: `temporal server start-dev`
-- Check namespaces exist: `temporal operator namespace list`
-
-**Nexus errors:**
-- Verify Nexus endpoints: `temporal operator nexus endpoint list`
-- Ensure IT and Finance workers are running
-
-**LLM errors:**
-- Check API key is set: `echo $OPENAI_API_KEY`
-- Verify LiteLLM model format: https://docs.litellm.ai/docs/providers
-
-**Import errors:**
-- Make sure you're running from `openai_temporal/` directory
-- Run `uv sync` to ensure dependencies are installed
 
 **Non-OpenAI Model Warnings:**
 When using non-OpenAI models (e.g., Anthropic Claude), you may see harmless tracing warnings:

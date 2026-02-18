@@ -117,6 +117,34 @@ class FinanceMCPServer:
 
             # Wait for result (stateless - completes quickly)
             return await handle.result()
+        
+        # Uncomment to test dynamic tool discovery - requires MCP server restart
+        @self.mcp.tool()
+        # async def retail_eval(ticker: str) -> str:
+        #     """
+        #     Get retail eval information.
+
+        #     Args:
+        #         ticker: Stock ticker symbol (e.g., AAPL, GOOGL)
+
+        #     Returns:
+        #         Current stock price as formatted string
+        #     """
+        #     client = await self.get_client()
+
+        #     # Create Pydantic model (Temporal best practice)
+        #     input_data = StockPriceInput(ticker=ticker)
+
+        #     # Start workflow - this is where durability begins
+        #     handle = await client.start_workflow(
+        #         GetStockPriceWorkflow.run,
+        #         input_data,
+        #         id=f"stock-price-{ticker}-{uuid.uuid4()}",
+        #         task_queue=self.task_queue,
+        #     )
+
+        #     # Wait for result (stateless - completes quickly)
+        #     return await handle.result()
 
 
 def create_finance_mcp_server(

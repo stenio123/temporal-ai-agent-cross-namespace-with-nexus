@@ -1,9 +1,9 @@
 # Durable Agent Loop - LiteLLM Implementation
 
-**Approach:** Manual agent orchestration with LiteLLM for multi-provider LLM support
+**Approach:** AI agent orchestration with LiteLLM for multi-provider LLM support
 
 This implementation demonstrates a complete durable agent loop built with:
-- **Manual agent orchestration** - Explicit while loop with full control over agent decisions
+- **AI agent orchestration** - Explicit while loop with full control over agent decisions
 - **LiteLLM** - Support for any LLM provider (OpenAI, Anthropic Claude, Google Gemini, etc.)
 - **Temporal activities** - Plan next action and execute tools as durable activities
 - **Nexus operations** - Cross-namespace tool execution (IT and Finance services)
@@ -11,6 +11,8 @@ This implementation demonstrates a complete durable agent loop built with:
 - **Multi-turn conversations** - Interactive chat via Temporal Updates
 
 ## Architecture
+
+![Architecture](../images/litellm_temporal.png)
 
 ### Components
 
@@ -87,17 +89,17 @@ This implementation demonstrates a complete durable agent loop built with:
    temporal operator nexus endpoint create \
      --name it-nexus-endpoint \
      --target-namespace it-namespace \
-     --target-task-queue it-tools-queue
+     --target-task-queue it-task-queue
 
    temporal operator nexus endpoint create \
      --name finance-nexus-endpoint \
      --target-namespace finance-namespace \
-     --target-task-queue finance-tools-queue
+     --target-task-queue finance-task-queue
    ```
 
 ## Running the Demo
 
-You need **3 terminal windows** running simultaneously:
+In addition to the server, you need **4 terminal windows** running simultaneously:
 
 ### Terminal 1: IT Nexus Worker
 ```bash
@@ -167,119 +169,6 @@ This implementation uses LiteLLM, so you can easily switch providers by:
    ```
 
 3. **Restart workers** for changes to take effect
-
-## Code Structure
-
-```
-litellm_temporal/
-├── app/
-│   ├── activities.py              # plan_next_action, execute_tool
-│   ├── workflow.py                # Main agent loop
-│   ├── llm_client.py              # LiteLLM client configuration
-│   ├── it_activities.py           # IT tool implementations
-│   ├── finance_activities.py      # Finance tool implementations
-│   ├── it_service.py              # IT Nexus service definition
-│   ├── finance_service.py         # Finance Nexus service definition
-│   ├── it_nexus_handler.py        # IT Nexus handlers
-│   ├── finance_nexus_handler.py   # Finance Nexus handlers
-│   └── shared.py                  # Shared constants
-├── orchestrator_worker.py         # Main workflow worker
-├── client.py                      # Interactive CLI client
-├── it_nexus_worker.py             # IT namespace worker
-├── finance_nexus_worker.py        # Finance namespace worker
-└── pyproject.toml                 # Dependencies
-```
-
-## Key Patterns
-
-### Manual Agent Loop
-```python
-while True:
-    # Manual conversation history tracking
-    self.conversation_history.append({"role": "user", "content": message})
-
-    # LLM decides next action
-    plan = await workflow.execute_activity(
-        AgentActivities.plan_next_action,
-        args=[context, self.conversation_history, self.remote_tools],
-    )
-
-    # Manual tool routing
-    if plan.next_step == "execute_tool":
-        result = await workflow.execute_activity(
-            AgentActivities.execute_tool,
-            args=[plan.tool_name, plan.tool_args]
-        )
-```
-
-### Manual Nexus Calls
-```python
-# Create Nexus client
-client = workflow.create_nexus_client(service=ITService, endpoint="it-nexus-endpoint")
-
-# Execute operation
-result = await client.execute_operation(
-    ITService.execute_tool,
-    {"tool_name": "jira_metrics", "args": {...}}
-)
-```
-
-### Multi-Turn with Updates
-```python
-@workflow.update
-async def send_message(self, message: str) -> str:
-    """Send message and wait for response"""
-    self.current_message = message
-    await workflow.wait_condition(lambda: self.pending_response is not None)
-    response = self.pending_response
-    self.pending_response = None
-    return response
-```
-
-## Advantages
-
-- ✅ **Full control** - See every step of agent decision-making
-- ✅ **Educational** - Clear visibility into agent loop patterns
-- ✅ **Multi-provider** - Use any LLM via LiteLLM
-- ✅ **Flexible** - Easy to customize agent logic
-- ✅ **Production-ready** - Stable Temporal patterns
-
-## Disadvantages
-
-- ❌ **More code** - ~200-300 lines in workflow
-- ❌ **Manual management** - Must track history, route tools, etc.
-- ❌ **Provider switching** - Requires code changes to switch LLMs
-
-## Comparison
-
-For a simpler alternative using OpenAI Agents SDK, see `../openai_temporal/`
-
-| Feature | This (litellm_temporal) | openai_temporal |
-|---------|-------------------------|-----------------|
-| Code Size | ~200-300 lines | ~30-50 lines |
-| Agent Loop | Manual while loop | SDK managed |
-| LLM Support | Any (via LiteLLM) | Any (via LiteLLM) |
-| Provider Switching | Code changes required | Config file change |
-| Control Level | Full control | Convention over config |
-| Educational Value | High | Medium |
-
-## Troubleshooting
-
-**Workers not connecting:**
-- Ensure Temporal server is running: `temporal server start-dev`
-- Check namespaces exist: `temporal operator namespace list`
-
-**Nexus errors:**
-- Verify Nexus endpoints: `temporal operator nexus endpoint list`
-- Ensure IT and Finance workers are running
-
-**LLM errors:**
-- Check API key is set: `echo $OPENAI_API_KEY`
-- Verify LiteLLM model format: https://docs.litellm.ai/docs/providers
-
-**Import errors:**
-- Make sure you're running from `litellm_temporal/` directory
-- Run `uv sync` to ensure dependencies are installed
 
 ## Learn More
 

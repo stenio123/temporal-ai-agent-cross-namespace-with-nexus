@@ -70,7 +70,7 @@ LOCAL TOOLS:
 - calculator: Evaluate mathematical expressions (e.g., "2 + 2", "15 * 23")
 - weather: Get weather information for cities
 
-MCP TOOLS (via dedicated Temporal workflows):
+MCP TOOLS:
 {mcp_descriptions}
 
 Use the appropriate tools to help users with their requests. Be concise and helpful in your responses.

@@ -12,57 +12,10 @@ This implementation demonstrates a complete durable agent loop built with:
 - **Automatic conversation memory** - SDK manages conversation history
 - **Multi-turn conversations** - Interactive chat via Temporal Updates
 
-## Architecture Note: Why No Nexus?
-
-**This implementation uses direct HTTP calls from the orchestrator to MCP servers, not Nexus.**
-
-**Why Nexus was excluded:**
-- **Nexus requires static operation definitions** - Operations must be defined at compile time with specific types
-- **OpenAI strict schemas conflict with generic tools** - Cannot use `dict[str, Any]` for generic `call_tool` operations
-- **MCP servers are accessible via HTTP** - Direct HTTP calls are simpler and sufficient
-- Nexus is for cross-namespace workflow orchestration, not tool exposure.
-
-**What Nexus is good for:**
-- Cross-namespace workflow orchestration (starting workflows in other namespaces)
-- RPC between teams with different namespace ownership
-- Service contracts for inter-team dependencies
-
-**This architecture:**
-- Orchestrator workflow calls MCP servers via HTTP (Activity wrapper for durability)
-- MCP servers are Temporal clients that start durable workflows on their own task queues
-- Each team (IT, Finance) owns their MCP server and workflows, just without the Nexus layer
-
-## Distributed Deployment
-
-**NOTE:** In a real distributed setting, each component can run on separate machines:
-- `client.py` - User-facing client (Machine 1)
-- `orchestrator_worker.py` - Main orchestration worker (Machine 2)
-- `mcp_servers/finance_mcp_http.py` + `finance_worker.py` - Finance MCP server and worker (Machine 3)
-- `mcp_servers/it_mcp_http.py` + `it_worker.py` - IT MCP server and worker (Machine 4)
-
-All machines connect to the same Temporal cluster. MCP servers expose HTTP endpoints that the orchestrator calls. Each MCP server uses Temporal internally for durable workflow execution on dedicated task queues (QUEUE_IT, QUEUE_FINANCE).
 
 ## Architecture
 
-### Flow
-
-**Orchestrator → MCP Tools:**
-```
-Orchestrator Workflow
-    ↓ Activity (HTTP call)
-MCP HTTP Server (port 8001/8002, separate process)
-    ↓ Temporal client call
-Workflows/Activities (durable execution on dedicated task queues)
-```
-
-**External Access (Claude Desktop → Tools):**
-```
-Claude Desktop
-    ↓ STDIO transport
-MCP Server (subprocess)
-    ↓ Temporal client call
-Workflows/Activities (durable execution)
-```
+![Architecture](../images/openai_mcp_temporal.png)
 
 ### Components
 
@@ -323,32 +276,6 @@ This implementation uses LiteLLM, so you can easily switch providers by:
 
 3. **Restart workers** for changes to take effect
 
-## Code Structure
-
-```
-openai_temporal_mcp/
-├── app/
-│   ├── activities.py              # Local tools + MCP HTTP wrappers
-│   ├── workflow.py                # OpenAI Agent SDK integration
-│   ├── llm_client.py              # LLM configuration and Agent creation
-│   ├── it_activities.py           # IT tool implementations
-│   ├── finance_activities.py      # Finance tool implementations
-│   ├── it_models.py               # IT input models (Pydantic)
-│   ├── finance_models.py          # Finance input models (Pydantic)
-│   ├── it_workflows.py            # IT stateful workflow
-│   ├── finance_workflows.py       # Finance stateless workflows
-│   └── shared.py                  # Shared constants
-├── mcp_servers/
-│   ├── finance_mcp_server.py      # Finance MCP server 
-│   ├── it_mcp_server.py           # IT MCP server 
-├── orchestrator_worker.py         # Main workflow worker
-├── client.py                      # Interactive CLI client
-├── it_worker.py                   # IT namespace worker
-├── finance_worker.py              # Finance namespace worker
-├── test_finance_mcp.py            # Finance MCP tests
-├── test_it_mcp.py                 # IT MCP tests
-└── pyproject.toml                 # Dependencies
-```
 
 ## Conversation Persistence and Crash Recovery
 

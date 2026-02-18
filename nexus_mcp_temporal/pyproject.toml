@@ -1,0 +1,23 @@
+[project]
+name = "nexus-mcp-temporal"
+version = "0.1.0"
+description = "Bidirectional MCP ↔ Nexus bridge with OpenAI Agents SDK"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "temporalio[openai-agents]>=1.18.0",
+    "openai>=1.0.0",
+    "openai-agents[litellm]==0.3.2",
+    "litellm>=1.0.0",
+    "simpleeval>=0.9.13",
+    "python-dotenv>=1.0.0",
+    "nexus-mcp @ git+https://github.com/bergundy/nexus-mcp-python.git@main",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+# No build system needed - this is a script-based project
