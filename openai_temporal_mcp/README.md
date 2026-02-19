@@ -2,6 +2,8 @@
 
 **Approach:** OpenAI Agents SDK with HTTP-accessible MCP servers
 
+▶️ [Watch this demo on YouTube](https://youtu.be/i7NeaKnccDE?si=2blgNBg2z3mr8Ny1&t=1287)
+
 This implementation demonstrates a complete durable agent loop built with:
 - **OpenAI Agents SDK** - Automatic agent orchestration via Runner.run()
 - **Model Context Protocol (MCP)** - Industry-standard protocol for AI tool integration

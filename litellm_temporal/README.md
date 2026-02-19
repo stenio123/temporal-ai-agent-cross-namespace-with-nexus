@@ -2,6 +2,8 @@
 
 **Approach:** AI agent orchestration with LiteLLM for multi-provider LLM support
 
+▶️ [Watch this demo on YouTube](https://youtu.be/i7NeaKnccDE?si=4zNAan62nNY3RLMS&t=571)
+
 This implementation demonstrates a complete durable agent loop built with:
 - **AI agent orchestration** - Explicit while loop with full control over agent decisions
 - **LiteLLM** - Support for any LLM provider (OpenAI, Anthropic Claude, Google Gemini, etc.)

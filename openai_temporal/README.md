@@ -2,6 +2,8 @@
 
 **Approach:** OpenAI Agents SDK with AI agent loop management
 
+▶️ [Watch this demo on YouTube](https://youtu.be/i7NeaKnccDE?si=Zd-JMpxSil_7lN2l&t=1072)
+
 This implementation demonstrates a complete durable agent loop built with:
 - **OpenAI Agents SDK** - AI agent orchestration via Runner.run()
 - **LiteLLM integration** - Support for any LLM provider (OpenAI, Anthropic Claude, Google Gemini, etc.)

@@ -2,6 +2,8 @@
 
 This project demonstrates the **nexus-mcp-python** bridge pattern, enabling bidirectional communication between MCP (Model Context Protocol) and Temporal Nexus operations.
 
+▶️ [Watch this demo on YouTube](https://youtu.be/i7NeaKnccDE?si=5PvlwEiUNvArt7jh&t=1729)
+
 ## 🎯 What Makes This Different
 
 Unlike the other three implementations, this project uses a **universal MCP Gateway** that acts as a bridge:
